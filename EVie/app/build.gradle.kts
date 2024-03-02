@@ -32,7 +32,10 @@ android {
 }
 
 dependencies {
-
+    implementation ("com.mapbox.mapboxsdk:mapbox-sdk-services:6.15.0")
+    implementation("com.mapbox.maps:android: 10.10.1")
+    // If you're using compose also add the compose extension
+    // implementation("com.mapbox.extension:maps-compose:$CONSTANTS::MAP_SDK_VERSION")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.10.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
