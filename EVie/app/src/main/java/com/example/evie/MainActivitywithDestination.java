@@ -276,7 +276,7 @@ public class MainActivitywithDestination extends AppCompatActivity {
             }
         });
 
-        mapView.getMapboxMap().loadStyleUri(Style.MAPBOX_STREETS, new Style.OnStyleLoaded() {
+        mapView.getMapboxMap().loadStyleUri("mapbox://styles/fongfong/cltalnqus00hl01p3hp2z208t", new Style.OnStyleLoaded() {
             @Override
             public void onStyleLoaded(@NonNull Style style) {
                 mapView.getMapboxMap().setCamera(new CameraOptions.Builder().zoom(20.0).build());
