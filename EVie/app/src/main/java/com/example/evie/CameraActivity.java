@@ -24,6 +24,7 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
+import android.graphics.drawable.ShapeDrawable;
 import android.media.Image;
 import android.os.Bundle;
 import android.util.Log;
@@ -44,9 +45,13 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.material.internal.Experimental;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.common.model.LocalModel;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.objects.DetectedObject;
 import com.google.mlkit.vision.objects.ObjectDetection;
 import com.google.mlkit.vision.objects.ObjectDetector;
-import com.google.mlkit.vision.objects.custom.CustomObjectDetectorOptions;
+import com.google.mlkit.vision.objects.ObjectDetectorOptionsBase;
+//import com.google.mlkit.vision.objects.custom.CustomObjectDetectorOptions;
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions;
 
 
 public class CameraActivity extends AppCompatActivity {
@@ -66,10 +71,12 @@ public class CameraActivity extends AppCompatActivity {
     Display display;
 
     Bitmap bitmap4Save;
+    ObjectDetector objectDetector;
 
     ArrayList<Bitmap> bitmapArrayList = new ArrayList<>();
     ArrayList<Bitmap> bitmap4DisplayArrayList = new ArrayList<>();
 
+    ArrayList<DetectedObject> objectsDetected = new ArrayList<>();
     boolean isRunning = false;
 
     @ExperimentalGetImage
@@ -93,22 +100,21 @@ public class CameraActivity extends AppCompatActivity {
                         // or .setUri(URI to model file)
                         .build();
 
-        CustomObjectDetectorOptions customObjectDetectorOptions =
-                new CustomObjectDetectorOptions.Builder(localModel)
-                        .setDetectorMode(CustomObjectDetectorOptions.STREAM_MODE)
-                        .enableClassification()
-                        .setClassificationConfidenceThreshold(0.5f)
-                        .setMaxPerObjectLabelCount(3)
-                        .build();
+//        CustomObjectDetectorOptions customObjectDetectorOptions =
+//                new CustomObjectDetectorOptions.Builder(localModel)
+//                        .setDetectorMode(CustomObjectDetectorOptions.STREAM_MODE)
+//                        .setMaxPerObjectLabelCount(1)
+//                        .build();
 
-        ObjectDetector objectDetector =
-                ObjectDetection.getClient(customObjectDetectorOptions);
+//        objectDetector =
+//                ObjectDetection.getClient(customObjectDetectorOptions);
+//
+        ObjectDetectorOptions options= new ObjectDetectorOptions.Builder().setDetectorMode(ObjectDetectorOptions.STREAM_MODE).enableClassification().build();
+        objectDetector = ObjectDetection.getClient(options);
 
-
-
-        mPaint.setColor(Color.GREEN);
+        mPaint.setColor(Color.RED);
         mPaint.setStyle(Paint.Style.FILL_AND_STROKE);
-        mPaint.setStrokeWidth(10);
+        mPaint.setStrokeWidth(2);
 
         cameraProviderFuture.addListener(() -> {
             try {
@@ -123,26 +129,31 @@ public class CameraActivity extends AppCompatActivity {
         if (!allPermissionsGranted()) {
             getRuntimePermissions();
         }
+
     }
 
     //CHANGE THIS
 
-//    Runnable RunMlkit = new Runnable() {
-//        @Override
-//        public void run() {
-//            poseDetector.process(InputImage.fromBitmap(bitmapArrayList.get(0),0)).addOnSuccessListener(new OnSuccessListener<Pose>() {
-//                @Override
-//                public void onSuccess(Pose pose) {
-//                    poseArrayList.add(pose);
-//                }
-//            }).addOnFailureListener(new OnFailureListener() {
-//                @Override
-//                public void onFailure(@NonNull Exception e) {
-//
-//                }
-//            });
-//        }
-//    };
+    Runnable RunObjectDetection= new Runnable() {
+        @Override
+        public void run() {
+
+            objectDetector.process(InputImage.fromBitmap(bitmapArrayList.get(0),0)).addOnSuccessListener(new OnSuccessListener<List<DetectedObject>>() {
+                @Override
+                public void onSuccess(List<DetectedObject> detectedObjects) {
+                    Log.d("kok", "onSuccess" + detectedObjects.size());
+                    objectsDetected.addAll(detectedObjects);
+                }
+            }).addOnFailureListener(new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+
+                }
+            });
+        }
+
+    };
+
 
     @ExperimentalGetImage
     void bindPreview(@NonNull ProcessCameraProvider cameraProvider) {
@@ -150,7 +161,7 @@ public class CameraActivity extends AppCompatActivity {
                 .build();
 
         CameraSelector cameraSelector = new CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                 .build();
 
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
@@ -174,39 +185,41 @@ public class CameraActivity extends AppCompatActivity {
                 Bitmap bitmap = Bitmap.createBitmap(imageProxy.getWidth(), imageProxy.getHeight(), Bitmap.Config.ARGB_8888);
                 bitmap.copyPixelsFromBuffer(byteBuffer);
 
+                Matrix matrix = new Matrix();
+                matrix.postRotate(270);
+                matrix.postScale(-1,1);
+                Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, imageProxy.getWidth(), imageProxy.getHeight(), matrix, false);
+                bitmapArrayList.add(rotatedBitmap);
 
-//
-//                Matrix matrix = new Matrix();
-//                matrix.postRotate(270);
-//                matrix.postScale(-1,1);
-//                Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap,0,0,imageProxy.getWidth(), imageProxy.getHeight(),matrix,false);
-//
-//                bitmapArrayList.add(rotatedBitmap);
+                if (objectsDetected.size() >= 1) {
+                    Log.d("kok", "li pa vide ");
+                    canvas = new Canvas(bitmapArrayList.get(0));
+                    Rect boundingBox= objectsDetected.get(0).getBoundingBox();
+                    int left= boundingBox.left;
+                    int right= boundingBox.right;
+                    int top= boundingBox.top;
+                    int bottom= boundingBox.bottom;
+                    canvas.drawRect(new Rect(left,top,right,bottom),mPaint);
+                    bitmap4DisplayArrayList.clear();
+                    bitmap4DisplayArrayList.add(bitmapArrayList.get(0));
+                    bitmap4Save = bitmapArrayList.get(bitmapArrayList.size()-1);
+                    bitmapArrayList.clear();
+                    bitmapArrayList.add(bitmap4Save);
+                    objectsDetected.clear();
+                    isRunning = false;
+                }
 
-//                if (poseArrayList.size() >= 1) {
-//                    canvas = new Canvas(bitmapArrayList.get(0));
-//
-//                    for (PoseLandmark poseLandmark : poseArrayList.get(0).getAllPoseLandmarks()) {
-//                        canvas.drawCircle(poseLandmark.getPosition().x, poseLandmark.getPosition().y,5,mPaint);
-//                    }
-//
-//                    bitmap4DisplayArrayList.clear();
-//                    bitmap4DisplayArrayList.add(bitmapArrayList.get(0));
-//                    bitmap4Save = bitmapArrayList.get(bitmapArrayList.size()-1);
-//                    bitmapArrayList.clear();
-//                    bitmapArrayList.add(bitmap4Save);
-//                    poseArrayList.clear();
-//                    isRunning = false;
-//                }
-//
-//                if (poseArrayList.size() == 0 && bitmapArrayList.size() >= 1 && !isRunning) {
-//                    RunMlkit.run();
-//                    isRunning = true;
-//                }
-//
-//                if (bitmap4DisplayArrayList.size() >= 1) {
-//                    display.getBitmap(bitmap4DisplayArrayList.get(0));
-//                }
+
+
+                if (objectsDetected.size() == 0 && bitmapArrayList.size() >= 1 && !isRunning) {
+                    Log.d("abc", "li p run");
+                    RunObjectDetection.run();
+                    isRunning = true;
+                }
+
+                if (bitmap4DisplayArrayList.size() >= 1) {
+                    display.getBitmap(bitmap4DisplayArrayList.get(0));
+                }
 
                 imageProxy.close();
             }

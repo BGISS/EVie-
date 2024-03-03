@@ -59,6 +59,8 @@ dependencies {
     implementation ("androidx.camera:camera-view:1.4.0-alpha04")
 
     // Add the following ML Kit dependencies
-    implementation ("com.google.mlkit:object-detection-custom:17.0.1")
+   // implementation ("com.google.mlkit:object-detection-custom:17.0.1")
+    implementation ("com.google.mlkit:object-detection:17.0.1")
+
 
 }
