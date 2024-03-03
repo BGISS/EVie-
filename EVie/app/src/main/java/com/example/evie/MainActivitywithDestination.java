@@ -14,6 +14,8 @@ import android.graphics.BitmapFactory;
 import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Toast;
 
@@ -26,6 +28,7 @@ import androidx.core.app.ActivityCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.textfield.TextInputEditText;
 import com.mapbox.android.core.location.LocationEngine;
 import com.mapbox.android.core.location.LocationEngineCallback;
 import com.mapbox.android.core.location.LocationEngineProvider;
@@ -79,6 +82,11 @@ import com.mapbox.navigation.ui.voice.model.SpeechError;
 import com.mapbox.navigation.ui.voice.model.SpeechValue;
 import com.mapbox.navigation.ui.voice.model.SpeechVolume;
 import com.mapbox.navigation.ui.voice.view.MapboxSoundButton;
+import com.mapbox.search.autocomplete.PlaceAutocomplete;
+import com.mapbox.search.autocomplete.PlaceAutocompleteSuggestion;
+import com.mapbox.search.ui.adapter.autocomplete.PlaceAutocompleteUiAdapter;
+import com.mapbox.search.ui.view.CommonSearchViewConfiguration;
+import com.mapbox.search.ui.view.SearchResultsView;
 
 import java.util.Arrays;
 import java.util.List;
@@ -86,6 +94,9 @@ import java.util.Locale;
 import java.util.Objects;
 
 import kotlin.Unit;
+import kotlin.coroutines.Continuation;
+import kotlin.coroutines.CoroutineContext;
+import kotlin.coroutines.EmptyCoroutineContext;
 import kotlin.jvm.functions.Function1;
 
 public class MainActivitywithDestination extends AppCompatActivity {
@@ -201,8 +212,19 @@ public class MainActivitywithDestination extends AppCompatActivity {
 
     private boolean isVoiceInstructionsMuted = false;
 
+    //    1 Search start here
+    private PlaceAutocomplete placeAutocomplete;
+    private SearchResultsView searchResultsView;
+    private PlaceAutocompleteUiAdapter placeAutocompleteUiAdapter;
+    private TextInputEditText searchET;
+    private boolean ignoreNextQueryUpdate = false;
 
-//    here
+    //   1 Search end here
+
+
+
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -231,6 +253,56 @@ public class MainActivitywithDestination extends AppCompatActivity {
         mapboxNavigation.registerRoutesObserver(routesObserver);
         mapboxNavigation.registerLocationObserver(locationObserver);
         mapboxNavigation.registerVoiceInstructionsObserver(voiceInstructionsObserver);
+
+        //    2 Search start here
+        placeAutocomplete = PlaceAutocomplete.create(getString(R.string.mapbox_access_token));
+        searchET = findViewById(R.id.searchET);
+
+        searchResultsView = findViewById(R.id.search_results_view);
+        searchResultsView.initialize(new SearchResultsView.Configuration(new CommonSearchViewConfiguration()));
+
+        placeAutocompleteUiAdapter = new PlaceAutocompleteUiAdapter(searchResultsView, placeAutocomplete, LocationEngineProvider.getBestLocationEngine(MainActivitywithDestination.this));
+
+        searchET.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+
+            }
+
+            // when text is changed in the field, then we immediately start searching the place using this code
+            @Override
+            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
+                if (ignoreNextQueryUpdate) {
+                    ignoreNextQueryUpdate = false;
+                } else {
+                    placeAutocompleteUiAdapter.search(charSequence.toString(), new Continuation<Unit>() {
+                        @NonNull
+                        @Override
+                        public CoroutineContext getContext() {
+                            return EmptyCoroutineContext.INSTANCE;
+                        }
+
+                        @Override
+                        public void resumeWith(@NonNull Object o) {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    searchResultsView.setVisibility(View.VISIBLE);
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+
+            }
+
+        });
+
+        //    2 Search end here
 
         MapboxSoundButton soundButton = findViewById(R.id.soundButton);
         soundButton.unmute();
@@ -276,7 +348,7 @@ public class MainActivitywithDestination extends AppCompatActivity {
             }
         });
 
-        mapView.getMapboxMap().loadStyleUri("mapbox://styles/fongfong/cltalnqus00hl01p3hp2z208t", new Style.OnStyleLoaded() {
+        mapView.getMapboxMap().loadStyleUri("mapbox://styles/fongfong/cltazizvu00qw01qk6asag63o", new Style.OnStyleLoaded() {
             @Override
             public void onStyleLoaded(@NonNull Style style) {
                 mapView.getMapboxMap().setCamera(new CameraOptions.Builder().zoom(20.0).build());
@@ -319,6 +391,49 @@ public class MainActivitywithDestination extends AppCompatActivity {
                         focusLocationBtn.hide();
                     }
                 });
+
+                // 3 Search start here
+                placeAutocompleteUiAdapter.addSearchListener(new PlaceAutocompleteUiAdapter.SearchListener() {
+                    @Override
+                    public void onSuggestionsShown(@NonNull List<PlaceAutocompleteSuggestion> list) {
+
+                    }
+
+                    @Override
+                    public void onSuggestionSelected(@NonNull PlaceAutocompleteSuggestion placeAutocompleteSuggestion) {
+                        ignoreNextQueryUpdate = true;
+                        focusLocation = false;
+                        searchET.setText(placeAutocompleteSuggestion.getName());
+                        searchResultsView.setVisibility(View.GONE);
+
+                        // when user clicks a result place, we'll set pin to that place and will set a route to that place
+                        // when "set route" button is clicked using the following code
+                        pointAnnotationManager.deleteAll();
+                        PointAnnotationOptions pointAnnotationOptions = new PointAnnotationOptions().withTextAnchor(TextAnchor.CENTER).withIconImage(bitmap)
+                                .withPoint(placeAutocompleteSuggestion.getCoordinate());
+                        pointAnnotationManager.create(pointAnnotationOptions);
+                        updateCamera(placeAutocompleteSuggestion.getCoordinate(), 0.0);
+
+                        setRoute.setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View view) {
+                                fetchRoute(placeAutocompleteSuggestion.getCoordinate());
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onPopulateQueryClick(@NonNull PlaceAutocompleteSuggestion placeAutocompleteSuggestion) {
+                        //queryEditText.setText(placeAutocompleteSuggestion.getName());
+                    }
+
+                    @Override
+                    public void onError(@NonNull Exception e) {
+
+                    }
+                });
+
+                // 3 Search end here
             }
         });
     }
